@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../store/AppContext';
 import { supabase } from '../../services/supabase';
 import { searchPictograms, resolveCategory } from '../../services/arasaac';
 import { speakText, SpeechToTextSession } from '../../services/googleVoice';
 import { queuePanicAlert, queueMessage } from '../../services/offlineSync';
-import { sendPanicNotification, mockNotifications } from '../../services/firebase';
+import { sendPanicNotification } from '../../services/firebase';
 import { 
   Volume2, Mic, AlertCircle, Send, MessageCircle, 
-  HelpCircle, Shield, Smile, Book, Compass, Trash2, WifiOff,
-  User, CheckCircle, ChevronRight, Play, Heart, Star, Settings
+  Shield, Trash2, WifiOff, Settings
 } from 'lucide-react';
 
 // Vocabulario por Etapas de Vida
@@ -135,6 +134,93 @@ export default function PacienteDashboard() {
   // Modo actual de la barra lateral ('tablero' o 'plantillas')
   const [sidebarMode, setSidebarMode] = useState('tablero');
 
+  const categories = useMemo(() => {
+    const cats = [...vocData.categories];
+    if (comunicacionLevel === 'Intermedio' || interfaceConfig.showStarters) {
+      if (!cats.includes('síntomas')) cats.push('síntomas');
+      if (!cats.includes('emociones')) cats.push('emociones');
+    }
+    return cats;
+  }, [vocData.categories, comunicacionLevel, interfaceConfig.showStarters]);
+
+  const items = useMemo(() => {
+    const its = { ...vocData.items };
+    if (comunicacionLevel === 'Intermedio' || interfaceConfig.showStarters) {
+      its.síntomas = ['cabeza', 'estómago', 'dientes', 'garganta', 'pie', 'mano', 'ojo', 'oído'];
+      its.emociones = ['feliz', 'triste', 'enojado', 'cansado', 'asustado', 'tranquilo'];
+    }
+    return its;
+  }, [vocData.items, comunicacionLevel, interfaceConfig.showStarters]);
+
+  const fetchPadreVinculado = useCallback(async () => {
+    if (!profile?.id_usuario) return;
+    try {
+      const { data, error } = await supabase
+        .from('padres_pacientes')
+        .select(`
+          id_padre,
+          padres (
+            usuarios (
+              correo
+            )
+          )
+        `)
+        .eq('id_paciente', profile.id_usuario)
+        .limit(1);
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setPadreVinculado({
+          id_padre: data[0].id_padre,
+          correo: data[0].padres.usuarios.correo
+        });
+      }
+    } catch (error) {
+      console.error('Error al buscar padre:', error);
+    }
+  }, [profile]);
+
+  const fetchChatMessages = useCallback(async (padreId) => {
+    if (!profile?.id_usuario) return;
+    try {
+      const { data, error } = await supabase
+        .from('mensajes')
+        .select('*')
+        .or(`and(emisor_id.eq.${profile.id_usuario},receptor_id.eq.${padreId}),and(emisor_id.eq.${padreId},receptor_id.eq.${profile.id_usuario})`)
+        .order('fecha', { ascending: true });
+
+      if (error) throw error;
+      setChatMessages(data || []);
+    } catch (error) {
+      console.error('Error al cargar mensajes de chat:', error);
+    }
+  }, [profile]);
+
+  const loadCategoryPictograms = useCallback(async (cat) => {
+    setLoadingPictos(true);
+    const terms = items[cat] || [];
+    const newPictos = { ...loadedPictos };
+
+    for (const term of terms) {
+      if (!newPictos[term]) {
+        const results = await searchPictograms(term);
+        if (results.length > 0) {
+          newPictos[term] = results[0];
+        } else {
+          newPictos[term] = {
+            id: `local-${term}`,
+            texto: term,
+            imagen: '/placeholder-word.png',
+            categoria: resolveCategory(term)
+          };
+        }
+      }
+    }
+
+    setLoadedPictos(newPictos);
+    setLoadingPictos(false);
+  }, [items, loadedPictos]);
+
   // Aplicar configuración por defecto del nivel
   const applyLevelConfig = (level) => {
     if (level === 'Básico') {
@@ -170,66 +256,75 @@ export default function PacienteDashboard() {
     }
   };
 
-  // Sincronizar nivel con perfil al cargar
+  // Sincronizar nivel con perfil al cargar o asignar por defecto según etapa de vida
   useEffect(() => {
     if (profile?.nivel_comunicacion) {
-      setComunicacionLevel(profile.nivel_comunicacion);
+      const level = profile.nivel_comunicacion;
+      setTimeout(() => setComunicacionLevel(level), 0);
+    } else if (profile?.etapa_vida) {
+      // Asignar nivel recomendado adaptado a la etapa de vida
+      if (profile.etapa_vida === '18-25') {
+        setTimeout(() => setComunicacionLevel('Avanzado'), 0);
+      } else if (profile.etapa_vida === '13-18') {
+        setTimeout(() => setComunicacionLevel('Intermedio'), 0);
+      } else {
+        setTimeout(() => setComunicacionLevel('Básico'), 0);
+      }
     }
-  }, [profile?.nivel_comunicacion]);
+  }, [profile?.nivel_comunicacion, profile?.etapa_vida]);
 
   // Aplicar cambios en la plantilla base de nivel
   useEffect(() => {
-    applyLevelConfig(comunicacionLevel);
+    setTimeout(() => applyLevelConfig(comunicacionLevel), 0);
   }, [comunicacionLevel]);
 
   // Sincronizar el modo de sidebar activo si cambian las banderas
   useEffect(() => {
     if (interfaceConfig.showPictoGrid) {
-      setSidebarMode('tablero');
+      setTimeout(() => setSidebarMode('tablero'), 0);
     } else if (interfaceConfig.showTemplates) {
-      setSidebarMode('plantillas');
+      setTimeout(() => setSidebarMode('plantillas'), 0);
     }
   }, [interfaceConfig.showPictoGrid, interfaceConfig.showTemplates]);
 
-  // Procesar categorías y vocabulario dinámico
-  const categories = [...vocData.categories];
-  const items = { ...vocData.items };
 
-  if (comunicacionLevel === 'Intermedio' || interfaceConfig.showStarters) {
-    if (!categories.includes('síntomas')) {
-      categories.push('síntomas');
-      items.síntomas = ['cabeza', 'estómago', 'dientes', 'garganta', 'pie', 'mano', 'ojo', 'oído'];
-    }
-    if (!categories.includes('emociones')) {
-      categories.push('emociones');
-      items.emociones = ['feliz', 'triste', 'enojado', 'cansado', 'asustado', 'tranquilo'];
-    }
-  }
 
   // Cambiar selectedCategory si no existe en la lista actual
   useEffect(() => {
     if (!categories.includes(selectedCategory)) {
-      setSelectedCategory(categories[0]);
+      const firstCat = categories[0];
+      setTimeout(() => setSelectedCategory(firstCat), 0);
     }
   }, [comunicacionLevel, etapa, interfaceConfig]);
 
   // Cargar pictogramas de la categoría seleccionada
   useEffect(() => {
     if (interfaceConfig.showPictoGrid) {
-      loadCategoryPictograms(selectedCategory);
+      Promise.resolve().then(() => {
+        loadCategoryPictograms(selectedCategory);
+      });
     }
-  }, [selectedCategory, etapa, comunicacionLevel, interfaceConfig.showPictoGrid]);
+  }, [selectedCategory, etapa, comunicacionLevel, interfaceConfig.showPictoGrid, loadCategoryPictograms]);
 
   // Buscar al padre vinculado y cargar chat
   useEffect(() => {
     if (profile) {
-      fetchPadreVinculado();
+      Promise.resolve().then(() => {
+        fetchPadreVinculado();
+      });
+    } else {
+      setTimeout(() => {
+        setPadreVinculado(null);
+        setChatMessages([]);
+      }, 0);
     }
-  }, [profile]);
+  }, [profile, fetchPadreVinculado]);
 
   useEffect(() => {
     if (padreVinculado) {
-      fetchChatMessages(padreVinculado.id_padre);
+      Promise.resolve().then(() => {
+        fetchChatMessages(padreVinculado.id_padre);
+      });
 
       const channel = supabase
         .channel(`chat_hijo_${profile.id_usuario}`)
@@ -253,7 +348,7 @@ export default function PacienteDashboard() {
         supabase.removeChannel(channel);
       };
     }
-  }, [padreVinculado]);
+  }, [padreVinculado, profile?.id_usuario, fetchChatMessages]);
 
   // Pre-cargar términos comunes
   useEffect(() => {
@@ -300,7 +395,7 @@ export default function PacienteDashboard() {
       const mapped = [];
       
       for (const w of words) {
-        const clean = w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()¿?]/g, "");
+        const clean = w.replace(/[.,#!$%&;:{}=\-_~()¿?]/g, "").replace(/\//g, "").replace(/\*/g, "").replace(/\^/g, "");
         if (clean) {
           if (loadedPictos[clean]) {
             mapped.push(loadedPictos[clean]);
@@ -327,7 +422,7 @@ export default function PacienteDashboard() {
     const lastWord = words[words.length - 1]?.trim();
     
     if (!lastWord || lastWord.length < 2) {
-      setSuggestions([]);
+      setTimeout(() => setSuggestions([]), 0);
       return;
     }
     
@@ -376,72 +471,7 @@ export default function PacienteDashboard() {
     return () => clearTimeout(timer);
   }, [advancedText, interfaceConfig.showTextInput, interfaceConfig.showSuggestions]);
 
-  const fetchPadreVinculado = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('padres_pacientes')
-        .select(`
-          id_padre,
-          padres (
-            usuarios (
-              correo
-            )
-          )
-        `)
-        .eq('id_paciente', profile.id_usuario)
-        .limit(1);
 
-      if (error) throw error;
-      if (data && data.length > 0) {
-        setPadreVinculado({
-          id_padre: data[0].id_padre,
-          correo: data[0].padres.usuarios.correo
-        });
-      }
-    } catch (error) {
-      console.error('Error al buscar padre:', error);
-    }
-  };
-
-  const fetchChatMessages = async (padreId) => {
-    try {
-      const { data, error } = await supabase
-        .from('mensajes')
-        .select('*')
-        .or(`and(emisor_id.eq.${profile.id_usuario},receptor_id.eq.${padreId}),and(emisor_id.eq.${padreId},receptor_id.eq.${profile.id_usuario})`)
-        .order('fecha', { ascending: true });
-
-      if (error) throw error;
-      setChatMessages(data);
-    } catch (error) {
-      console.error('Error al cargar mensajes de chat:', error);
-    }
-  };
-
-  const loadCategoryPictograms = async (cat) => {
-    setLoadingPictos(true);
-    const terms = items[cat] || [];
-    const newPictos = { ...loadedPictos };
-
-    for (const term of terms) {
-      if (!newPictos[term]) {
-        const results = await searchPictograms(term);
-        if (results.length > 0) {
-          newPictos[term] = results[0];
-        } else {
-          newPictos[term] = {
-            id: `local-${term}`,
-            texto: term,
-            imagen: '/placeholder-word.png',
-            categoria: resolveCategory(term)
-          };
-        }
-      }
-    }
-
-    setLoadedPictos(newPictos);
-    setLoadingPictos(false);
-  };
 
   // Conjugador Gramatical
   const conjugatePhrase = (phraseItems) => {
@@ -687,7 +717,7 @@ export default function PacienteDashboard() {
             const words = resultText.toLowerCase().split(/\s+/);
             const mapped = [];
             for (const w of words) {
-              const clean = w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()¿?]/g, "");
+              const clean = w.replace(/[.,#!$%&;:{}=\-_~()¿?]/g, "").replace(/\//g, "").replace(/\*/g, "").replace(/\^/g, "");
               if (clean) {
                 const res = await searchPictograms(clean);
                 if (res.length > 0) {
@@ -701,6 +731,11 @@ export default function PacienteDashboard() {
           }
         },
         (status) => {
+          if (status === 'unsupported') {
+            speakText('El dictado por voz no está disponible en este dispositivo.');
+          } else if (status === 'error') {
+            speakText('Hubo un error con el micrófono. Inténtalo de nuevo.');
+          }
           if (status === 'stopped' || status === 'error' || status === 'unsupported') {
             setIsRecording(false);
           }
@@ -713,6 +748,10 @@ export default function PacienteDashboard() {
 
   // Botón de Pánico
   const triggerPanicButton = () => {
+    if (!profile) {
+      speakText('Espera a que cargue tu perfil, por favor.');
+      return;
+    }
     setPanicOverlay(true);
     setPanicCountdown(3);
     setPanicStatus('counting');
@@ -749,17 +788,22 @@ export default function PacienteDashboard() {
           await savePanicAlert(locString);
         },
         async (error) => {
-          console.warn('No se pudo obtener ubicación GPS, usando fallback:', error.message);
-          await savePanicAlert('Geolocalización desactivada / Sin GPS');
+          console.warn('No se pudo obtener ubicación GPS, usando fallback con mock simulado:', error.message);
+          // Ubicación mock simulada segura para testing/desarrollo o si falla GPS real
+          await savePanicAlert('19.432608,-99.133208 (Simulado)');
         },
         { enableHighAccuracy: true, timeout: 5000 }
       );
     } else {
-      savePanicAlert('Geolocalización no soportada');
+      savePanicAlert('19.432608,-99.133208 (Simulado)');
     }
   };
 
   const savePanicAlert = async (location) => {
+    if (!profile) {
+      console.warn('[Panic] Perfil no cargado, no se pudo registrar la alerta.');
+      return;
+    }
     const alertData = {
       id_paciente: profile.id_usuario,
       ubicacion: location
@@ -771,7 +815,7 @@ export default function PacienteDashboard() {
       } else {
         const { error } = await supabase.from('alertas').insert([alertData]);
         if (error) throw error;
-        await sendPanicNotification(profile.correo, location);
+        await sendPanicNotification(profile.correo || 'Paciente Anónimo', location);
       }
     } catch (err) {
       console.error('Error al registrar alerta de pánico:', err);

@@ -1,0 +1,2 @@
+## 2026-06-09T07:41:46-06:00
+You are teamwork_preview_explorer. Analyze the current folder structure of c:\Users\emili\OneDrive\Escritorio\the blue dino to see what code has already been written, what files exist in src/, supabase/, and other folders, and what tools/scripts are set up. Run build and check for errors, and write your findings to a file named 'initial_exploration.md' in your agent directory (.agents/explorer_1). Keep it factual. Do not modify any files.

@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../store/AppContext';
 import { supabase } from '../../services/supabase';
 import { searchPictograms, resolveCategory } from '../../services/arasaac';
 import { speakText } from '../../services/googleVoice';
-import { mockNotifications, sendMessageNotification } from '../../services/firebase';
+import { sendMessageNotification } from '../../services/firebase';
+import { queueMessage } from '../../services/offlineSync';
 import { 
   User, Users, MessageSquare, BookOpen, LogOut, Plus, 
-  Send, Volume2, ShieldAlert, FileText, CheckCircle, Search, WifiOff
+  Send, Volume2, FileText, WifiOff
 } from 'lucide-react';
 
 export default function PadreDashboard() {
@@ -39,19 +40,125 @@ export default function PadreDashboard() {
   const [expedientes, setExpedientes] = useState([]);
   const [nuevaNota, setNuevaNota] = useState('');
 
+  const fetchLinkedHijos = useCallback(async () => {
+    if (!profile?.id_usuario) return;
+    try {
+      // Consultar tabla de relación
+      const { data, error } = await supabase
+        .from('padres_pacientes')
+        .select(`
+          id_paciente,
+          pacientes (
+            etapa_vida,
+            nivel_comunicacion,
+            usuarios (
+              correo
+            )
+          )
+        `)
+        .eq('id_padre', profile.id_usuario);
+
+      if (error) throw error;
+
+      const formatted = (data || []).map(item => ({
+        id_paciente: item.id_paciente,
+        etapa_vida: item.pacientes.etapa_vida,
+        nivel_comunicacion: item.pacientes.nivel_comunicacion,
+        correo: item.pacientes.usuarios.correo
+      }));
+
+      setLinkedHijos(formatted);
+      setSelectedHijo(prev => {
+        if (formatted.length === 0) return null;
+        if (!prev || !formatted.some(h => h.id_paciente === prev.id_paciente)) {
+          return formatted[0];
+        }
+        return prev;
+      });
+    } catch (error) {
+      console.error('Error al cargar hijos:', error);
+    }
+  }, [profile]);
+
+  const fetchHijoTerapeutas = useCallback(async (hijoId) => {
+    try {
+      const { data, error } = await supabase
+        .from('terapeutas_pacientes')
+        .select(`
+          id_terapeuta,
+          terapeutas (
+            especialidad,
+            cedula,
+            usuarios (
+              correo
+            )
+          )
+        `)
+        .eq('id_paciente', hijoId);
+
+      if (error) throw error;
+
+      const formatted = (data || []).map(item => ({
+        id_terapeuta: item.id_terapeuta,
+        especialidad: item.terapeutas.especialidad,
+        cedula: item.terapeutas.cedula,
+        correo: item.terapeutas.usuarios.correo
+      }));
+
+      setHijoTerapeutas(formatted);
+    } catch (error) {
+      console.error('Error al cargar terapeutas del hijo:', error);
+    }
+  }, []);
+
+  const fetchChatMessages = useCallback(async (hijoId) => {
+    if (!profile?.id_usuario) return;
+    try {
+      const { data, error } = await supabase
+        .from('mensajes')
+        .select('*')
+        .or(`and(emisor_id.eq.${profile.id_usuario},receptor_id.eq.${hijoId}),and(emisor_id.eq.${hijoId},receptor_id.eq.${profile.id_usuario})`)
+        .order('fecha', { ascending: true });
+
+      if (error) throw error;
+      setChatMessages(data || []);
+    } catch (error) {
+      console.error('Error al cargar chat:', error);
+    }
+  }, [profile]);
+
+  const fetchExpedientes = useCallback(async (hijoId) => {
+    try {
+      const { data, error } = await supabase
+        .from('expedientes')
+        .select('*')
+        .eq('id_paciente', hijoId)
+        .order('fecha_actualizacion', { ascending: false });
+
+      if (error) throw error;
+      setExpedientes(data || []);
+    } catch (error) {
+      console.error('Error al cargar expediente:', error);
+    }
+  }, []);
+
   // 1. Cargar pacientes vinculados al padre al iniciar
   useEffect(() => {
     if (profile) {
-      fetchLinkedHijos();
+      Promise.resolve().then(() => {
+        fetchLinkedHijos();
+      });
     }
-  }, [profile]);
+  }, [profile, fetchLinkedHijos]);
 
   // 2. Cargar datos específicos cuando cambia el hijo seleccionado
   useEffect(() => {
     if (selectedHijo) {
-      fetchHijoTerapeutas(selectedHijo.id_paciente);
-      fetchChatMessages(selectedHijo.id_paciente);
-      fetchExpedientes(selectedHijo.id_paciente);
+      Promise.resolve().then(() => {
+        fetchHijoTerapeutas(selectedHijo.id_paciente);
+        fetchChatMessages(selectedHijo.id_paciente);
+        fetchExpedientes(selectedHijo.id_paciente);
+      });
 
       // Suscribirse a mensajes en tiempo real con Supabase
       const channel = supabase
@@ -76,113 +183,24 @@ export default function PadreDashboard() {
         supabase.removeChannel(channel);
       };
     }
-  }, [selectedHijo]);
+  }, [selectedHijo, fetchHijoTerapeutas, fetchChatMessages, fetchExpedientes]);
 
   // Auto-scroll en chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const fetchLinkedHijos = async () => {
-    try {
-      // Consultar tabla de relación
-      const { data, error } = await supabase
-        .from('padres_pacientes')
-        .select(`
-          id_paciente,
-          pacientes (
-            etapa_vida,
-            nivel_comunicacion,
-            usuarios (
-              correo
-            )
-          )
-        `)
-        .eq('id_padre', profile.id_usuario);
 
-      if (error) throw error;
-
-      const formatted = data.map(item => ({
-        id_paciente: item.id_paciente,
-        etapa_vida: item.pacientes.etapa_vida,
-        nivel_comunicacion: item.pacientes.nivel_comunicacion,
-        correo: item.pacientes.usuarios.correo
-      }));
-
-      setLinkedHijos(formatted);
-      if (formatted.length > 0 && !selectedHijo) {
-        setSelectedHijo(formatted[0]);
-      }
-    } catch (error) {
-      console.error('Error al cargar hijos:', error);
-    }
-  };
-
-  const fetchHijoTerapeutas = async (hijoId) => {
-    try {
-      const { data, error } = await supabase
-        .from('terapeutas_pacientes')
-        .select(`
-          id_terapeuta,
-          terapeutas (
-            especialidad,
-            cedula,
-            usuarios (
-              correo
-            )
-          )
-        `)
-        .eq('id_paciente', hijoId);
-
-      if (error) throw error;
-
-      const formatted = data.map(item => ({
-        id_terapeuta: item.id_terapeuta,
-        especialidad: item.terapeutas.especialidad,
-        cedula: item.terapeutas.cedula,
-        correo: item.terapeutas.usuarios.correo
-      }));
-
-      setHijoTerapeutas(formatted);
-    } catch (error) {
-      console.error('Error al cargar terapeutas del hijo:', error);
-    }
-  };
-
-  const fetchChatMessages = async (hijoId) => {
-    try {
-      const { data, error } = await supabase
-        .from('mensajes')
-        .select('*')
-        .or(`and(emisor_id.eq.${profile.id_usuario},receptor_id.eq.${hijoId}),and(emisor_id.eq.${hijoId},receptor_id.eq.${profile.id_usuario})`)
-        .order('fecha', { ascending: true });
-
-      if (error) throw error;
-      setChatMessages(data);
-    } catch (error) {
-      console.error('Error al cargar chat:', error);
-    }
-  };
-
-  const fetchExpedientes = async (hijoId) => {
-    try {
-      const { data, error } = await supabase
-        .from('expedientes')
-        .select('*')
-        .eq('id_paciente', hijoId)
-        .order('fecha_actualizacion', { ascending: false });
-
-      if (error) throw error;
-      setExpedientes(data);
-    } catch (error) {
-      console.error('Error al cargar expediente:', error);
-    }
-  };
 
   // Vincular Hijo
   const handleVincularHijo = async (e) => {
     e.preventDefault();
     if (!emailHijo) return;
+
+    if (linkedHijos.length >= 3) {
+      setStatusMsg({ text: 'No puedes vincular más de 3 pacientes (límite de 3 alcanzado).', type: 'error' });
+      return;
+    }
 
     setStatusMsg({ text: 'Buscando...', type: 'info' });
     try {
@@ -200,6 +218,19 @@ export default function PadreDashboard() {
 
       if (userRecord.rol !== 'paciente') {
         setStatusMsg({ text: 'El correo corresponde a un usuario que no es paciente.', type: 'error' });
+        return;
+      }
+
+      // Validar límite de padres del paciente (máximo 2)
+      const { data: parentsData, error: parentsErr } = await supabase
+        .from('padres_pacientes')
+        .select('id_padre')
+        .eq('id_paciente', userRecord.id_usuario);
+
+      if (parentsErr) throw parentsErr;
+
+      if (parentsData && parentsData.length >= 2) {
+        setStatusMsg({ text: 'Este paciente ya tiene el número máximo de tutores vinculados (máximo 2).', type: 'error' });
         return;
       }
 
@@ -308,8 +339,7 @@ export default function PadreDashboard() {
     const results = [];
 
     for (const word of words) {
-      // Limpiar puntuación básica
-      const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()¿?]/g, "");
+      const cleanWord = word.replace(/[.,#!$%&;:{}=\-_~()¿?]/g, "").replace(/\//g, "").replace(/\*/g, "").replace(/\^/g, "");
       if (cleanWord) {
         const pictoRes = await searchPictograms(cleanWord);
         if (pictoRes.length > 0) {
@@ -342,15 +372,31 @@ export default function PadreDashboard() {
     if (phrasePictos.length === 0 || !selectedHijo) return;
 
     const phraseStr = phrasePictos.map(p => p.texto).join(' ');
+    const msgObj = {
+      emisor_id: profile.id_usuario,
+      receptor_id: selectedHijo.id_paciente,
+      mensaje: phraseStr,
+      tipo: 'pictograma'
+    };
+
+    if (isOffline) {
+      const queued = await queueMessage(msgObj);
+      if (queued) {
+        setChatMessages(prev => [...prev, {
+          ...queued,
+          id_mensaje: queued.id_temp
+        }]);
+        setPhrasePictos([]);
+        setInputText('');
+        setStatusMsg({ text: 'Pictogramas guardados localmente (sin conexión).', type: 'info' });
+      }
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('mensajes')
-        .insert([{
-          emisor_id: profile.id_usuario,
-          receptor_id: selectedHijo.id_paciente,
-          mensaje: phraseStr,
-          tipo: 'pictograma'
-        }]);
+        .insert([msgObj]);
 
       if (error) throw error;
 
@@ -361,7 +407,16 @@ export default function PadreDashboard() {
       setInputText('');
     } catch (err) {
       console.error(err);
-      setStatusMsg({ text: 'Error al enviar pictogramas.', type: 'error' });
+      const queued = await queueMessage(msgObj);
+      if (queued) {
+        setChatMessages(prev => [...prev, {
+          ...queued,
+          id_mensaje: queued.id_temp
+        }]);
+        setPhrasePictos([]);
+        setInputText('');
+        setStatusMsg({ text: 'Error de red. Pictogramas guardados localmente.', type: 'info' });
+      }
     }
   };
 
@@ -370,15 +425,30 @@ export default function PadreDashboard() {
     e.preventDefault();
     if (!newMsgText.trim() || !selectedHijo) return;
 
+    const msgObj = {
+      emisor_id: profile.id_usuario,
+      receptor_id: selectedHijo.id_paciente,
+      mensaje: newMsgText.trim(),
+      tipo: 'texto'
+    };
+
+    if (isOffline) {
+      const queued = await queueMessage(msgObj);
+      if (queued) {
+        setChatMessages(prev => [...prev, {
+          ...queued,
+          id_mensaje: queued.id_temp
+        }]);
+        setNewMsgText('');
+        setStatusMsg({ text: 'Mensaje guardado localmente (sin conexión).', type: 'info' });
+      }
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('mensajes')
-        .insert([{
-          emisor_id: profile.id_usuario,
-          receptor_id: selectedHijo.id_paciente,
-          mensaje: newMsgText.trim(),
-          tipo: 'texto'
-        }])
+        .insert([msgObj])
         .select();
 
       if (error) throw error;
@@ -387,6 +457,15 @@ export default function PadreDashboard() {
       setNewMsgText('');
     } catch (err) {
       console.error(err);
+      const queued = await queueMessage(msgObj);
+      if (queued) {
+        setChatMessages(prev => [...prev, {
+          ...queued,
+          id_mensaje: queued.id_temp
+        }]);
+        setNewMsgText('');
+        setStatusMsg({ text: 'Error de red. Mensaje guardado localmente.', type: 'info' });
+      }
     }
   };
 

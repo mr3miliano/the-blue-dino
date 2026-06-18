@@ -71,7 +71,7 @@ export const initFirebaseFCM = async () => {
   // Solicitar permisos de notificación nativa
   await mockNotifications.requestPermission();
 
-  console.log('[Firebase FCM] Inicializado en modo de prueba / simulación.');
+  console.log(`[Firebase FCM] Inicializado en modo de prueba / simulación para proyecto: ${firebaseConfig.projectId}`);
   console.log('Las notificaciones de pánico y mensajes del chat se simularán localmente y por consola.');
 };
 

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../store/AppContext';
 import { supabase } from '../../services/supabase';
 import { 
-  Users, User, Plus, Trash2, FileText, CheckCircle, 
-  MapPin, Clock, LogOut, Activity, AlertTriangle, MessageSquare, WifiOff
+  Users, Trash2, FileText, MapPin, Clock, LogOut, Activity, AlertTriangle, WifiOff
 } from 'lucide-react';
 
 export default function TerapeutaDashboard() {
@@ -27,22 +26,9 @@ export default function TerapeutaDashboard() {
   const [expedientes, setExpedientes] = useState([]);
   const [alertas, setAlertas] = useState([]);
 
-  // 1. Cargar pacientes asignados al iniciar
-  useEffect(() => {
-    if (profile) {
-      fetchPacientes();
-    }
-  }, [profile]);
-
-  // 2. Cargar historial del paciente al cambiar selección
-  useEffect(() => {
-    if (selectedPaciente) {
-      fetchPacienteHistorial(selectedPaciente.id_paciente);
-      fetchPacienteAlertas(selectedPaciente.id_paciente);
-    }
-  }, [selectedPaciente]);
-
-  const fetchPacientes = async () => {
+  // Funciones de carga de datos (declaradas antes de useEffect)
+  const fetchPacientes = useCallback(async () => {
+    if (!profile?.id_usuario) return;
     try {
       const { data, error } = await supabase
         .from('terapeutas_pacientes')
@@ -60,23 +46,29 @@ export default function TerapeutaDashboard() {
 
       if (error) throw error;
 
-      const formatted = data.map(item => ({
-        id_paciente: item.id_paciente,
-        etapa_vida: item.pacientes.etapa_vida,
-        nivel_comunicacion: item.pacientes.nivel_comunicacion,
-        correo: item.pacientes.usuarios.correo
-      }));
+      const formatted = (data || [])
+        .filter(item => item && item.pacientes && item.pacientes.usuarios)
+        .map(item => ({
+          id_paciente: item.id_paciente,
+          etapa_vida: item.pacientes.etapa_vida,
+          nivel_comunicacion: item.pacientes.nivel_comunicacion,
+          correo: item.pacientes.usuarios.correo
+        }));
 
       setPacientes(formatted);
-      if (formatted.length > 0 && !selectedPaciente) {
-        setSelectedPaciente(formatted[0]);
-      }
+      setSelectedPaciente(prev => {
+        if (formatted.length === 0) return null;
+        if (!prev || !formatted.some(p => p.id_paciente === prev.id_paciente)) {
+          return formatted[0];
+        }
+        return prev;
+      });
     } catch (err) {
       console.error('Error al cargar pacientes:', err);
     }
-  };
+  }, [profile]);
 
-  const fetchPacienteHistorial = async (pacienteId) => {
+  const fetchPacienteHistorial = useCallback(async (pacienteId) => {
     try {
       const { data, error } = await supabase
         .from('expedientes')
@@ -85,13 +77,13 @@ export default function TerapeutaDashboard() {
         .order('fecha_actualizacion', { ascending: false });
 
       if (error) throw error;
-      setExpedientes(data);
+      setExpedientes(data || []);
     } catch (err) {
       console.error('Error al cargar expedientes:', err);
     }
-  };
+  }, []);
 
-  const fetchPacienteAlertas = async (pacienteId) => {
+  const fetchPacienteAlertas = useCallback(async (pacienteId) => {
     try {
       const { data, error } = await supabase
         .from('alertas')
@@ -100,11 +92,30 @@ export default function TerapeutaDashboard() {
         .order('fecha', { ascending: false });
 
       if (error) throw error;
-      setAlertas(data);
+      setAlertas(data || []);
     } catch (err) {
       console.error('Error al cargar alertas:', err);
     }
-  };
+  }, []);
+
+  // 1. Cargar pacientes asignados al iniciar
+  useEffect(() => {
+    if (profile) {
+      Promise.resolve().then(() => {
+        fetchPacientes();
+      });
+    }
+  }, [profile, fetchPacientes]);
+
+  // 2. Cargar historial del paciente al cambiar selección
+  useEffect(() => {
+    if (selectedPaciente) {
+      Promise.resolve().then(() => {
+        fetchPacienteHistorial(selectedPaciente.id_paciente);
+        fetchPacienteAlertas(selectedPaciente.id_paciente);
+      });
+    }
+  }, [selectedPaciente, fetchPacienteHistorial, fetchPacienteAlertas]);
 
   // Vincular un nuevo paciente por correo (CRUD - Create)
   const handleVincularPaciente = async (e) => {

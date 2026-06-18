@@ -4,7 +4,7 @@
  * conectividad offline/online, y estados de carga globales.
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { initFirebaseFCM } from '../services/firebase';
 
@@ -27,39 +27,6 @@ export const AppProvider = ({ children }) => {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // Inicializar Firebase FCM y verificar sesión al arrancar
-  useEffect(() => {
-    initFirebaseFCM();
-
-    // 1. Obtener la sesión activa actual de Supabase
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setUser(session.user);
-        fetchUserProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    // 2. Escuchar cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session) {
-          setUser(session.user);
-          await fetchUserProfile(session.user.id);
-        } else {
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -109,6 +76,39 @@ export const AppProvider = ({ children }) => {
       setLoading(false);
     }
   };
+
+  // Inicializar Firebase FCM y verificar sesión al arrancar
+  useEffect(() => {
+    initFirebaseFCM();
+
+    // 1. Obtener la sesión activa actual de Supabase
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        fetchUserProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // 2. Escuchar cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          setUser(session.user);
+          await fetchUserProfile(session.user.id);
+        } else {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Iniciar Sesión
   const login = async (email, password) => {
@@ -180,6 +180,7 @@ export const AppProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {

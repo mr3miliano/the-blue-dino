@@ -100,7 +100,12 @@ BEGIN
     VALUES (new.id, new.email, v_rol);
 
     IF v_rol = 'padre' THEN
-        INSERT INTO public.padres (id_padre) VALUES (new.id);
+        INSERT INTO public.padres (id_padre, telefono, direccion) 
+        VALUES (
+            new.id,
+            new.raw_user_meta_data->>'telefono',
+            new.raw_user_meta_data->>'direccion'
+        );
     ELSIF v_rol = 'paciente' THEN
         INSERT INTO public.pacientes (id_paciente, etapa_vida, nivel_comunicacion)
         VALUES (
@@ -109,7 +114,12 @@ BEGIN
             COALESCE(new.raw_user_meta_data->>'nivel_comunicacion', 'Básico')
         );
     ELSIF v_rol = 'terapeuta' THEN
-        INSERT INTO public.terapeutas (id_terapeuta) VALUES (new.id);
+        INSERT INTO public.terapeutas (id_terapeuta, especialidad, cedula) 
+        VALUES (
+            new.id,
+            new.raw_user_meta_data->>'especialidad',
+            new.raw_user_meta_data->>'cedula'
+        );
     END IF;
 
     RETURN NEW;
