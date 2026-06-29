@@ -1,3 +1,4 @@
+/* global process */
 import { resolveCategory } from './src/services/arasaac.js';
 
 // Mock de localStorage/localforage simplificado para entornos Node
@@ -49,8 +50,8 @@ function validateParentPatientRelation(parentPatientsList, newPatientId) {
   return { valid: true };
 }
 
+// Un Paciente puede tener 1 o 2 padres
 function validatePatientParentRelation(patientParentsList, newParentId) {
-  // Un Paciente puede tener 1 o 2 padres
   if (patientParentsList.length >= 2) {
     return { valid: false, error: 'Un Paciente no puede tener más de 2 padres.' };
   }
@@ -96,14 +97,14 @@ async function runTests() {
     await mockOfflineStore.setItem('pending_panic_alerts', []);
     await mockOfflineStore.setItem('pending_chat_messages', []);
 
-    const alert = await queuePanicAlert({ id_paciente: 'pac-123', ubicacion: 'GPS: 19.4326,-99.1332' });
+    await queuePanicAlert({ id_paciente: 'pac-123', ubicacion: 'GPS: 19.4326,-99.1332' });
     const queueAlerts = await mockOfflineStore.getItem('pending_panic_alerts');
     
     assert(queueAlerts.length === 1, 'La alerta offline de pánico se guardó correctamente');
     assert(queueAlerts[0].id_paciente === 'pac-123', 'El ID del paciente en la alerta offline es correcto');
     assert(queueAlerts[0].ubicacion === 'GPS: 19.4326,-99.1332', 'La ubicación GPS offline se guardó correctamente');
 
-    const msg = await queueMessage({ emisor_id: 'pac-123', receptor_id: 'pad-456', mensaje: 'Hola Papá', tipo: 'texto' });
+    await queueMessage({ emisor_id: 'pac-123', receptor_id: 'pad-456', mensaje: 'Hola Papá', tipo: 'texto' });
     const queueMsgs = await mockOfflineStore.getItem('pending_chat_messages');
 
     assert(queueMsgs.length === 1, 'El mensaje offline de chat se guardó correctamente en la cola');

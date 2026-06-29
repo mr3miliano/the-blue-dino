@@ -152,6 +152,16 @@ export default function PacienteDashboard() {
     return its;
   }, [vocData.items, comunicacionLevel, interfaceConfig.showStarters]);
 
+  const loadedPictosRef = useRef(loadedPictos);
+  useEffect(() => {
+    loadedPictosRef.current = loadedPictos;
+  }, [loadedPictos]);
+
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   const fetchPadreVinculado = useCallback(async () => {
     if (!profile?.id_usuario) return;
     try {
@@ -295,7 +305,7 @@ export default function PacienteDashboard() {
       const firstCat = categories[0];
       setTimeout(() => setSelectedCategory(firstCat), 0);
     }
-  }, [comunicacionLevel, etapa, interfaceConfig]);
+  }, [categories, selectedCategory]);
 
   // Cargar pictogramas de la categoría seleccionada
   useEffect(() => {
@@ -358,19 +368,15 @@ export default function PacienteDashboard() {
         'cabeza', 'estómago', 'dientes', 'garganta', 'pie', 'mano', 'ojo', 'oído',
         'autobús', 'tienda', 'dinero', 'comprar', 'ayuda', 'médico', 'feliz', 'triste', 'enojado'
       ];
-      const newPictos = { ...loadedPictos };
-      let changed = false;
+      const newPictos = {};
       for (const term of extraTerms) {
-        if (!newPictos[term]) {
-          const results = await searchPictograms(term);
-          if (results.length > 0) {
-            newPictos[term] = results[0];
-            changed = true;
-          }
+        const results = await searchPictograms(term);
+        if (results.length > 0) {
+          newPictos[term] = results[0];
         }
       }
-      if (changed) {
-        setLoadedPictos(prev => ({ ...prev, ...newPictos }));
+      if (Object.keys(newPictos).length > 0) {
+        setLoadedPictos(prev => ({ ...newPictos, ...prev }));
       }
     };
     preloadExtraTerms();
@@ -397,8 +403,8 @@ export default function PacienteDashboard() {
       for (const w of words) {
         const clean = w.replace(/[.,#!$%&;:{}=\-_~()¿?]/g, "").replace(/\//g, "").replace(/\*/g, "").replace(/\^/g, "");
         if (clean) {
-          if (loadedPictos[clean]) {
-            mapped.push(loadedPictos[clean]);
+          if (loadedPictosRef.current[clean]) {
+            mapped.push(loadedPictosRef.current[clean]);
           } else {
             const results = await searchPictograms(clean);
             if (results.length > 0) {
@@ -428,8 +434,8 @@ export default function PacienteDashboard() {
     
     const timer = setTimeout(async () => {
       const allKnownTerms = [
-        ...Object.keys(loadedPictos),
-        ...Object.values(items).flat(),
+        ...Object.keys(loadedPictosRef.current),
+        ...Object.values(itemsRef.current).flat(),
         'comer', 'jugar', 'dormir', 'quiero', 'baño', 'casa', 'parque', 'agua', 'jugo', 'comida',
         'autobús', 'tienda', 'dinero', 'comprar', 'computadora', 'medicina', 'ayuda', 'médico'
       ];
@@ -439,8 +445,8 @@ export default function PacienteDashboard() {
       
       const suggestionCards = [];
       for (const term of localMatches) {
-        if (loadedPictos[term]) {
-          suggestionCards.push(loadedPictos[term]);
+        if (loadedPictosRef.current[term]) {
+          suggestionCards.push(loadedPictosRef.current[term]);
         } else {
           const res = await searchPictograms(term);
           if (res.length > 0) {
