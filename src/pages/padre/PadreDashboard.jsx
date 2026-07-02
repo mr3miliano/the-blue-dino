@@ -13,6 +13,12 @@ import {
 export default function PadreDashboard() {
   const { profile, logout, isOffline } = useApp();
   const [activeTab, setActiveTab] = useState('hijos'); // 'hijos', 'pictos', 'chat', 'expediente'
+  const [showTestBanner, setShowTestBanner] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowTestBanner(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
   
   // Pacientes vinculados
   const [linkedHijos, setLinkedHijos] = useState([]);
@@ -540,6 +546,21 @@ export default function PadreDashboard() {
 
       {/* Área Principal de Contenido */}
       <div style={styles.mainContent}>
+        {showTestBanner && (
+          <div id="dashboard-success-banner" style={styles.testBanner}>
+            <div style={styles.testBannerContent}>
+              <span style={{ fontSize: '1.4rem' }}>🎉</span>
+              <div style={{ textAlign: 'left' }}>
+                <strong>¡Prueba de Autenticación Exitosa!</strong>
+                <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>
+                  Se inició sesión correctamente y se cargó el Dashboard para el rol de PADRE/TUTOR.
+                </div>
+              </div>
+              <button onClick={() => setShowTestBanner(false)} style={styles.testBannerClose}>&times;</button>
+            </div>
+          </div>
+        )}
+
         {isOffline && (
           <div style={styles.offlineBanner}>
             <WifiOff size={18} /> Estás sin conexión. Algunas funciones se guardarán localmente.
@@ -1161,5 +1182,34 @@ const styles = {
   },
   expedienteBody: {
     fontSize: '0.95rem'
+  },
+  testBanner: {
+    backgroundColor: '#ecfdf5',
+    border: '3px solid #10b981',
+    borderRadius: '16px',
+    padding: '16px 20px',
+    marginBottom: '24px',
+    boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.1)',
+    animation: 'slideDown 0.3s ease-out',
+  },
+  testBannerContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    color: '#065f46',
+    fontSize: '1rem',
+    fontWeight: '600',
+    position: 'relative',
+  },
+  testBannerClose: {
+    marginLeft: 'auto',
+    background: 'none',
+    border: 'none',
+    color: '#065f46',
+    fontSize: '1.5rem',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    padding: '0 4px',
+    lineHeight: '1',
   }
 };

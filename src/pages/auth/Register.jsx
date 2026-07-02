@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../store/AppContext';
-import { ArrowLeft, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 export default function Register() {
   const { register } = useApp();
@@ -11,6 +11,7 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [rol, setRol] = useState('padre'); // 'padre', 'paciente', 'terapeuta'
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   
   // Datos específicos del rol
   const [telefono, setTelefono] = useState('');
@@ -54,8 +55,7 @@ export default function Register() {
 
     try {
       await register(email, password, rol, extraData);
-      alert('¡Cuenta creada con éxito! Por favor inicia sesión.');
-      navigate('/login');
+      setShowSuccessModal(true);
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Ocurrió un error al registrar la cuenta.');
@@ -283,6 +283,29 @@ export default function Register() {
           </span>
         </div>
       </div>
+
+      {showSuccessModal && (
+        <div id="success-alert" style={styles.modalOverlay}>
+          <div style={styles.successModal}>
+            <div style={styles.successIconWrapper}>
+              <CheckCircle2 size={48} />
+            </div>
+            <h3 style={styles.successTitle}>¡Registro Exitoso!</h3>
+            <p style={styles.successText}>
+              La cuenta se ha creado con éxito. Ya puedes iniciar sesión.
+            </p>
+            <button 
+              id="success-alert-confirm"
+              type="button"
+              className="btn btn-primary" 
+              style={styles.modalBtn}
+              onClick={() => navigate('/login')}
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -384,16 +407,17 @@ const styles = {
   errorAlert: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    backgroundColor: '#fef2f2',
-    color: 'var(--color-panic)',
-    border: '1px solid #fee2e2',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    marginBottom: '20px',
-    fontSize: '0.95rem',
-    fontWeight: '600',
+    gap: '12px',
+    backgroundColor: '#fff5f5',
+    color: '#e53e3e',
+    border: '2px solid #feb2b2',
+    padding: '16px',
+    borderRadius: '16px',
+    marginBottom: '24px',
+    fontSize: '1rem',
+    fontWeight: 'bold',
     textAlign: 'left',
+    boxShadow: '0 10px 15px -3px rgba(229, 62, 62, 0.1)',
   },
   footer: {
     textAlign: 'center',
@@ -406,5 +430,67 @@ const styles = {
     color: 'var(--color-brand)',
     cursor: 'pointer',
     textDecoration: 'underline',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backdropFilter: 'blur(8px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  successModal: {
+    backgroundColor: 'white',
+    borderRadius: '24px',
+    padding: '36px',
+    maxWidth: '420px',
+    width: '90%',
+    textAlign: 'center',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '20px',
+    border: '4px solid #10b981',
+  },
+  successIconWrapper: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    backgroundColor: '#ecfdf5',
+    color: '#10b981',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)',
+  },
+  successTitle: {
+    fontSize: '1.8rem',
+    color: '#065f46',
+    margin: 0,
+    fontWeight: '800',
+  },
+  successText: {
+    fontSize: '1rem',
+    color: 'var(--color-text-muted)',
+    lineHeight: '1.5',
+    margin: 0,
+  },
+  modalBtn: {
+    width: '100%',
+    padding: '14px',
+    fontSize: '1.1rem',
+    fontWeight: 'bold',
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
+    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)',
+    color: 'white',
+    borderRadius: '12px',
+    cursor: 'pointer',
   }
 };

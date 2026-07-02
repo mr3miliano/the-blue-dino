@@ -78,8 +78,13 @@ const ADVANCED_TEMPLATES = {
 };
 
 export default function PacienteDashboard() {
-  const { profile, isOffline } = useApp();
-  
+  const [showTestBanner, setShowTestBanner] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowTestBanner(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Etapa de vida del paciente (default 6-12)
   const etapa = profile?.etapa_vida || '6-12';
   const vocData = VOCABULARY_BY_STAGE[etapa];
@@ -856,6 +861,20 @@ export default function PacienteDashboard() {
 
   return (
     <div style={styles.container}>
+      {showTestBanner && (
+        <div id="dashboard-success-banner" style={styles.testBanner}>
+          <div style={styles.testBannerContent}>
+            <span style={{ fontSize: '1.4rem' }}>🎉</span>
+            <div style={{ textAlign: 'left' }}>
+              <strong>¡Prueba de Autenticación Exitosa!</strong>
+              <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>
+                Se inició sesión correctamente y se cargó el Dashboard para el rol de PACIENTE (Hijo TEA).
+              </div>
+            </div>
+            <button onClick={() => setShowTestBanner(false)} style={styles.testBannerClose}>&times;</button>
+          </div>
+        </div>
+      )}
       {/* Cabecera */}
       <header style={styles.header}>
         <div style={styles.headerInfo}>
@@ -2272,5 +2291,33 @@ const styles = {
     cursor: 'pointer',
     border: 'none',
     transition: 'var(--transition-smooth)'
+  },
+  testBanner: {
+    backgroundColor: '#ecfdf5',
+    border: '3px solid #10b981',
+    borderRadius: '16px',
+    padding: '16px 20px',
+    margin: '16px',
+    boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.1)',
+  },
+  testBannerContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    color: '#065f46',
+    fontSize: '1rem',
+    fontWeight: '600',
+    position: 'relative',
+  },
+  testBannerClose: {
+    marginLeft: 'auto',
+    background: 'none',
+    border: 'none',
+    color: '#065f46',
+    fontSize: '1.5rem',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    padding: '0 4px',
+    lineHeight: '1',
   }
 };

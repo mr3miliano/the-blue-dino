@@ -54,7 +54,7 @@ export default function Login() {
         </div>
 
         {errorMsg && (
-          <div style={styles.errorAlert}>
+          <div id="error-alert" style={styles.errorAlert}>
             <AlertTriangle size={20} />
             <span>{errorMsg}</span>
           </div>
@@ -176,16 +176,17 @@ const styles = {
   errorAlert: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    backgroundColor: '#fef2f2',
-    color: 'var(--color-panic)',
-    border: '1px solid #fee2e2',
-    padding: '12px 16px',
-    borderRadius: '12px',
+    gap: '12px',
+    backgroundColor: '#fff5f5',
+    color: '#e53e3e',
+    border: '2px solid #feb2b2',
+    padding: '16px',
+    borderRadius: '16px',
     marginBottom: '20px',
-    fontSize: '0.95rem',
-    fontWeight: '600',
+    fontSize: '1rem',
+    fontWeight: 'bold',
     textAlign: 'left',
+    boxShadow: '0 10px 15px -3px rgba(229, 62, 62, 0.1)',
   },
   footer: {
     textAlign: 'center',
